@@ -1,0 +1,500 @@
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_PADDING ON;
+SET CONCAT_NULL_YIELDS_NULL ON;
+SET ANSI_WARNINGS ON;
+SET NUMERIC_ROUNDABORT OFF;
+SET ARITHABORT ON;
+GO
+
+IF NOT EXISTS (SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE SPECIFIC_SCHEMA = 'dbo' AND ROUTINE_NAME = 'SQLAdept')
+	EXEC ('CREATE PROC [dbo].[SQLAdept] AS BEGIN SELECT 0 END;') -- Temporary Dummy Proc
+GO
+
+/*
+Author............... Jason McGinty
+Create date.......... 2018-06-01
+Modify Date.......... 2019-07-14
+Title................ sp_sqlAdept
+Description.......... Provides BASIC recommendations on SQL Server misconfigurations and backups
+License.............. The MIT License (Free software)
+Version.............. v1.1
+Supported............ SQL Server 2016+
+Site................. https://wiredconsultant.com
+Source............... https://github.com/JasonMcGinty/
+*/
+
+ALTER PROCEDURE [dbo].[SQLAdept]
+	@detailed_instance_information BIT = 1
+	,@help BIT = 0
+AS
+BEGIN
+
+	SET TRANSACTION ISOLATION LEVEL READ UNCOMMITTED;
+	SET QUOTED_IDENTIFIER ON;
+	SET ANSI_PADDING ON;
+	SET CONCAT_NULL_YIELDS_NULL ON;
+	SET ANSI_WARNINGS ON;
+	SET NUMERIC_ROUNDABORT OFF;
+	SET ARITHABORT ON;
+	SET NOCOUNT ON;
+
+	----------------------------------------------------------------------------------------------------
+	--// Help							                                                            //--
+	----------------------------------------------------------------------------------------------------
+	IF @help = 1
+	BEGIN
+		PRINT '';
+		PRINT 'HELP...';
+		PRINT 'SQLAdept by Jason McGinty';
+		PRINT 'EXEC [dbo].[sp_sqlAdept] 
+			@detailed_instance_information = 1, -- Default. Returns additional instance information.
+			@help BIT = 0 -- Help.';
+		PRINT '';
+	END
+
+	----------------------------------------------------------------------------------------------------
+	--// Collect Data on the SQL Instance                                                           //--
+	----------------------------------------------------------------------------------------------------
+	DECLARE @cpu_count [int];
+	DECLARE @physical_memory_kb [bigint];
+	DECLARE @BuildClrVersion [sql_variant];
+	DECLARE @Collation [sql_variant];
+	DECLARE @CollationID [sql_variant];
+	DECLARE @ComparisonStyle [sql_variant];
+	DECLARE @ComputerNamePhysicalNetBIOS [sql_variant];
+	DECLARE @Edition [sql_variant];
+	DECLARE @EditionID [sql_variant];
+	DECLARE @EngineEdition [sql_variant];
+	DECLARE @HadrManagerStatus [sql_variant];
+	DECLARE @InstanceDefaultDataPath [sql_variant];
+	DECLARE @InstanceDefaultLogPath [sql_variant];
+	DECLARE @InstanceName [sql_variant];
+	DECLARE @IsAdvancedAnalyticsInstalled [sql_variant];
+	DECLARE @IsClustered [sql_variant];
+	DECLARE @IsFullTextInstalled [sql_variant];
+	DECLARE @IsHadrEnabled [sql_variant];
+	DECLARE @IsIntegratedSecurityOnly [sql_variant];
+	DECLARE @IsLocalDB [sql_variant];
+	DECLARE @IsPolybaseInstalled [sql_variant];
+	DECLARE @IsSingleUser [sql_variant];
+	DECLARE @IsXTPSupported [sql_variant];
+	DECLARE @LCID [sql_variant];
+	DECLARE @MachineName [sql_variant];
+	DECLARE @ProcessID [sql_variant];
+	DECLARE @ProductBuild [sql_variant];
+	DECLARE @ProductBuildType [sql_variant];
+	DECLARE @ProductLevel [sql_variant];
+	DECLARE @ProductMajorVersion [sql_variant];
+	DECLARE @ProductMinorVersion [sql_variant];
+	DECLARE @ProductUpdateReference [sql_variant];
+	DECLARE @ProductVersion [sql_variant];
+	DECLARE @ResourceLastUpdateDateTime [sql_variant];
+	DECLARE @ResourceVersion [sql_variant];
+	DECLARE @ServerName [sql_variant];
+	DECLARE @SqlCharSet [sql_variant];
+	DECLARE @SqlCharSetName [sql_variant];
+	DECLARE @SqlSortOrder [sql_variant];
+	DECLARE @SqlSortOrderName [sql_variant];
+	DECLARE @FilestreamShareName [sql_variant];
+	DECLARE @FilestreamConfiguredLevel [sql_variant];
+	DECLARE @FilestreamEffectiveLevel [sql_variant];
+
+	SELECT
+		@cpu_count = [cpu_count]
+		,@physical_memory_kb = [physical_memory_kb]
+		,@BuildClrVersion = SERVERPROPERTY('BuildClrVersion') --AS [BuildClrVersion]
+		,@Collation = SERVERPROPERTY('Collation') --AS [Collation]
+		,@CollationID = SERVERPROPERTY('CollationID') --AS [CollationID]
+		,@ComparisonStyle = SERVERPROPERTY('ComparisonStyle') --AS [ComparisonStyle]
+		,@ComputerNamePhysicalNetBIOS = SERVERPROPERTY('ComputerNamePhysicalNetBIOS') --AS [ComputerNamePhysicalNetBIOS]
+		,@Edition = SERVERPROPERTY('Edition') --AS [Edition]
+		,@EditionID = SERVERPROPERTY('EditionID') --AS [EditionID]
+		,@EngineEdition = SERVERPROPERTY('EngineEdition') --AS [EngineEdition]
+		,@HadrManagerStatus = SERVERPROPERTY('HadrManagerStatus') --AS [HadrManagerStatus]
+		,@InstanceDefaultDataPath = SERVERPROPERTY('InstanceDefaultDataPath') --AS [InstanceDefaultDataPath]
+		,@InstanceDefaultLogPath = SERVERPROPERTY('InstanceDefaultLogPath') --AS [InstanceDefaultLogPath]
+		,@InstanceName = SERVERPROPERTY('InstanceName') --AS [InstanceName]
+		,@IsAdvancedAnalyticsInstalled = SERVERPROPERTY('IsAdvancedAnalyticsInstalled') --AS [IsAdvancedAnalyticsInstalled]
+		,@IsClustered = SERVERPROPERTY('IsClustered') --AS [IsClustered]
+		,@IsFullTextInstalled = SERVERPROPERTY('IsFullTextInstalled') --AS [IsFullTextInstalled]
+		,@IsHadrEnabled = SERVERPROPERTY('IsHadrEnabled') --AS [IsHadrEnabled]
+		,@IsIntegratedSecurityOnly = SERVERPROPERTY('IsIntegratedSecurityOnly') --AS [IsIntegratedSecurityOnly]
+		,@IsLocalDB = SERVERPROPERTY('IsLocalDB') --AS [IsLocalDB]
+		,@IsPolybaseInstalled = SERVERPROPERTY('IsPolybaseInstalled') --AS [IsPolybaseInstalled]
+		,@IsSingleUser = SERVERPROPERTY('IsSingleUser') --AS [IsSingleUser]
+		,@IsXTPSupported = SERVERPROPERTY('IsXTPSupported') --AS [IsXTPSupported]
+		,@LCID = SERVERPROPERTY('LCID') --AS [LCID]
+		--,SERVERPROPERTY('LicenseType') Not in use
+		,@MachineName = SERVERPROPERTY('MachineName') --AS [MachineName]
+		--,SERVERPROPERTY('NumLicenses') Not in use
+		,@ProcessID = SERVERPROPERTY('ProcessID') --AS [ProcessID]
+		,@ProductBuild = SERVERPROPERTY('ProductBuild') --AS [ProductBuild]
+		,@ProductBuildType = SERVERPROPERTY('ProductBuildType') --AS [ProductBuildType]
+		,@ProductLevel = SERVERPROPERTY('ProductLevel') --AS [ProductLevel]
+		,@ProductMajorVersion = SERVERPROPERTY('ProductMajorVersion') --AS [ProductMajorVersion]
+		,@ProductMinorVersion = SERVERPROPERTY('ProductMinorVersion') --AS [ProductMinorVersion]
+		--,SERVERPROPERTY('ProductUpdateLevel') Not in use
+		,@ProductUpdateReference = SERVERPROPERTY('ProductUpdateReference') --AS [ProductUpdateReference]
+		,@ProductVersion = SERVERPROPERTY('ProductVersion') --AS [ProductVersion]
+		,@ResourceLastUpdateDateTime = SERVERPROPERTY('ResourceLastUpdateDateTime') --AS [ResourceLastUpdateDateTime]
+		,@ResourceVersion = SERVERPROPERTY('ResourceVersion') --AS [ResourceVersion]
+		,@ServerName = SERVERPROPERTY('ServerName') --AS [ServerName]
+		,@SqlCharSet = SERVERPROPERTY('SqlCharSet') --AS [SqlCharSet]
+		,@SqlCharSetName = SERVERPROPERTY('SqlCharSetName') --AS [SqlCharSetName]
+		,@SqlSortOrder = SERVERPROPERTY('SqlSortOrder') --AS [SqlSortOrder]
+		,@SqlSortOrderName = SERVERPROPERTY('SqlSortOrderName') --AS [SqlSortOrderName]
+		,@FilestreamShareName = SERVERPROPERTY('FilestreamShareName') --AS [FilestreamShareName]
+		,@FilestreamConfiguredLevel = SERVERPROPERTY('FilestreamConfiguredLevel') --AS [FilestreamConfiguredLevel]
+		,@FilestreamEffectiveLevel = SERVERPROPERTY('FilestreamEffectiveLevel') --AS FilestreamEffectiveLevel
+	FROM sys.dm_os_sys_info;
+
+	----------------------------------------------------------------------------------------------------
+	--// Start report					                                                            //--
+	----------------------------------------------------------------------------------------------------
+	PRINT '----------------------------------------------------------------------------------------------------';
+	PRINT 'SQL Adept report for SQL Server instance ' + CAST(@InstanceName AS NVARCHAR) + '.';
+	PRINT 'Start time: ' + CAST(GETDATE() AS NVARCHAR) + '.';
+	PRINT '(1) Always follow compliance protocol for your organization before making changes to PRODUCTION.';
+	PRINT '(2) This tool does NOT report ALL possible misconfigurations or issues.';
+	PRINT '(3) Related to (1) and (2). Fully test any changes before making changes to PRODUCTION.'
+	PRINT '(4) Always check with a QUALIFIED SQL Server DBA before making changes to any environment.'
+	PRINT '----------------------------------------------------------------------------------------------------';
+
+	----------------------------------------------------------------------------------------------------
+	--// Recommendations for the instance															//--
+	----------------------------------------------------------------------------------------------------
+	PRINT '';
+	PRINT 'Recommendations for the instance ' + CAST(@InstanceName AS NVARCHAR) + '...';
+	DECLARE @nText VARCHAR(MAX);
+	IF @Edition = 'Developer Edition (64-bit)'
+	BEGIN
+		SET @nText = 'Developer Edition (64-bit) cannot be used in production...';
+		PRINT @nText;
+	END
+
+	IF @InstanceDefaultDataPath = @InstanceDefaultLogPath
+	BEGIN
+		SET @nText = 'The InstanceDefaultDataPath and InstanceDefaultLogPath should NOT be on the same drive...';
+		PRINT @nText;
+	END
+
+	IF CAST(@InstanceDefaultDataPath AS NVARCHAR) LIKE 'C:\%'
+	BEGIN
+		SET @nText = 'The InstanceDefaultDataPath should NOT be on the C drive...';
+		PRINT @nText;
+	END
+
+	IF CAST(@InstanceDefaultLogPath AS NVARCHAR) LIKE 'C:\%'
+	BEGIN
+		SET @nText = 'The InstanceDefaultLogPath should NOT be on the C drive...';
+		PRINT @nText;
+	END
+
+	IF CAST(@InstanceName AS NVARCHAR) = 'MSSQLSERVER'
+	BEGIN
+		SET @nText = 'The InstanceName should NOT be the DEFAULT MSSQLSERVER...';
+		PRINT @nText;
+	END
+
+	/* Version specifc */
+	IF CAST(@ProductMajorVersion AS INT) < 13
+	BEGIN
+		SET @nText = 'Plan to upgrade or migrate to SQL Server 2016 or higher...';
+		PRINT @nText;
+	END
+
+	----------------------------------------------------------------------------------------------------
+	--// Recommendations for sp_configure															//--
+	----------------------------------------------------------------------------------------------------
+	PRINT '';
+	PRINT 'Recommendations for sp_configure...';
+	DECLARE @allocateMemoryOS INT; 
+	DECLARE @nameSpConfigure NVARCHAR(35);
+	DECLARE @valueSpConfigure sql_variant;
+	DECLARE @minSpConfigure sql_variant;
+	DECLARE @minValue sql_variant;
+	DECLARE @maxSpConfigure sql_variant;
+	DECLARE @valueInUseSpConfigure sql_variant;
+	DECLARE @descriptionSpConfigure sql_variant;
+	DECLARE @recommendationSpConfigure NVARCHAR(512);
+
+	SELECT @allocateMemoryOS = (total_physical_memory_kb *.7)/1024 FROM sys.dm_os_sys_memory
+
+	DECLARE @spConfigureCursor CURSOR
+	SET @spConfigureCursor = CURSOR FOR
+		SELECT 
+			[name]
+			,[value]
+			,[minimum]
+			,[maximum]
+			,[value_in_use]
+			,[description]
+			,CASE 
+				WHEN [name] = 'backup checksum default' THEN 1
+				WHEN [name] = 'default trace enabled' THEN 1
+				WHEN [name] = 'fill factor (%)' THEN 85
+				WHEN [name] = 'max server memory (MB)' THEN @allocateMemoryOS
+				WHEN [name] = 'nested triggers' THEN 0
+				WHEN [name] = 'remote query timeout (s)' THEN 600 
+				END AS [Recommendation]
+		FROM [sys].[configurations]
+		WHERE 
+			([name] = 'backup checksum default' AND value_in_use =  1) OR
+			([name] = 'default trace enabled' AND value_in_use =  0) OR
+			([name] = 'fill factor (%)' AND value_in_use IN(0,100)) OR
+			([name] = 'max server memory (MB)' AND value_in_use =  2147483647) OR
+			([name] = 'nested triggers' AND value_in_use =  1) OR
+			([name] = 'remote query timeout (s)' AND value_in_use =  2147483647)
+		ORDER BY [name]
+	OPEN @spConfigureCursor
+		FETCH NEXT
+		FROM @spConfigureCursor INTO @nameSpConfigure, @valueSpConfigure, @minSpConfigure, @maxSpConfigure, @valueInUseSpConfigure, @descriptionSpConfigure, @recommendationSpConfigure
+		WHILE  0 = @@FETCH_STATUS
+		BEGIN
+			PRINT 'configuration name: ' + CHAR(39) + @nameSpConfigure + CHAR(39) + ': The current value is ' + CAST(@valueSpConfigure AS NVARCHAR) + '. The recommended value is ' + @recommendationSpConfigure + '...';
+			FETCH NEXT
+			FROM @spConfigureCursor INTO @nameSpConfigure, @valueSpConfigure, @minSpConfigure, @maxSpConfigure, @valueInUseSpConfigure, @descriptionSpConfigure, @recommendationSpConfigure
+		END
+	CLOSE @spConfigureCursor;
+	DEALLOCATE @spConfigureCursor;
+
+	---------------------------------------------------------------------------------------------------
+	--// SQL Server sysadmin or securityadmin														//--
+	----------------------------------------------------------------------------------------------------
+	DECLARE @sysloginsName [sysname];
+	DECLARE @sysloginsCreateDate [datetime];
+	DECLARE @sysloginsUpdateDate [datetime];
+	DECLARE @sysloginsAccDate [datetime];
+	DECLARE @sysloginsHasAccess [int];
+	DECLARE @sysloginsIsNTName [int];
+	DECLARE @sysloginsIsNTGroup [int];
+	DECLARE @sysloginsISNTUser [int];
+	DECLARE @sysloginsSysAdmin [int];
+	DECLARE @sysloginsSecurityAdmin [int];
+	DECLARE @numberSysAdmin [int];
+	DECLARE @numberSecurityAdmin [int];
+
+	PRINT '';
+	PRINT 'Review sysadmin and securityadmin...';
+
+	DECLARE @sysAdminCursor CURSOR
+	SET @sysAdminCursor = CURSOR FOR
+		SELECT
+			[syslogins].[name]
+			,[syslogins].[createdate]
+			,[syslogins].[updatedate]
+			,[syslogins].[accdate]
+			,[syslogins].[hasaccess]
+			,[syslogins].[isntname]
+			,[syslogins].[isntgroup]
+			,[syslogins].[isntuser]
+			,[syslogins].[sysadmin]
+			,[syslogins].[securityadmin]
+		FROM sys.syslogins
+		WHERE 
+			([syslogins].[sysadmin] = 1 OR [syslogins].[securityadmin] = 1)
+		ORDER BY
+			createdate DESC
+	OPEN @sysAdminCursor
+		FETCH NEXT
+		FROM @sysAdminCursor INTO @sysloginsName, @sysloginsCreateDate, @sysloginsUpdateDate, @sysloginsAccDate, 
+						@sysloginsHasAccess, @sysloginsIsNTName, @sysloginsIsNTGroup, @sysloginsISNTUser,
+						@sysloginsSysAdmin, @sysloginsSecurityAdmin	
+		WHILE  0 = @@FETCH_STATUS
+		BEGIN
+			IF @sysloginsName NOT LIKE 'NT SERVICE%'
+				PRINT 'login: ' + CHAR(39) + @sysloginsName + CHAR(39) + ' was created on ' + CAST(@sysloginsCreateDate AS NVARCHAR) + '...'
+			FETCH NEXT
+			FROM @sysAdminCursor INTO @sysloginsName, @sysloginsCreateDate, @sysloginsUpdateDate, @sysloginsAccDate, 
+						@sysloginsHasAccess, @sysloginsIsNTName, @sysloginsIsNTGroup, @sysloginsISNTUser,
+						@sysloginsSysAdmin, @sysloginsSecurityAdmin	
+		END
+	CLOSE @sysAdminCursor
+	DEALLOCATE @sysAdminCursor
+
+	----------------------------------------------------------------------------------------------------
+	--// Database configuration review																//--
+	----------------------------------------------------------------------------------------------------
+	PRINT '';
+	PRINT 'Database configuration review...';
+	DECLARE @databaseID [int];
+	DECLARE @databaseName [sysname];
+	DECLARE @databaseCreateDate [datetime];
+	DECLARE @databaseCompatibilityLevel [tinyint];
+	DECLARE @databaseCollationName [sysname];
+	DECLARE @databaseUserAccessDesc [nvarchar](60);
+	DECLARE @databaseIsAutoShrinkOn [BIT];
+	DECLARE @databaseStateDesc [nvarchar](60);
+	DECLARE @databaseIsCleanlyShutdown [BIT];
+	DECLARE @databaseRecoveryModelDesc [nvarchar](60);
+	DECLARE @databasePageVerifyOptionDesc [nvarchar](60);
+	DECLARE @databaseIsAutoCreateStatsOn [BIT];
+
+	DECLARE @databaseReviewCursor CURSOR
+	SET @databaseReviewCursor = CURSOR FOR
+
+	SELECT
+		[database_id]
+		,[name]
+		,[create_date]
+		,[compatibility_level]
+		,[collation_name]
+		,[user_access_desc]
+		,[is_auto_shrink_on]
+		,[state_desc]
+		,[is_cleanly_shutdown]
+		,[recovery_model_desc]
+		,[page_verify_option_desc]
+		,[is_auto_create_stats_on]
+	FROM [sys].[databases]
+	WHERE [name] <> 'tempdb'
+	ORDER BY database_id
+	OPEN @databaseReviewCursor
+		FETCH NEXT
+		FROM @databaseReviewCursor INTO @databaseID, @databaseName, @databaseCreateDate, @databaseCompatibilityLevel, @databaseCollationName,
+			@databaseUserAccessDesc, @databaseIsAutoShrinkOn, @databaseStateDesc, @databaseIsCleanlyShutdown, @databaseRecoveryModelDesc,
+			@databasePageVerifyOptionDesc, @databaseIsAutoCreateStatsOn
+		WHILE  0 = @@FETCH_STATUS
+		BEGIN
+
+			IF DATEDIFF(day,@databaseCreateDate,GETDATE()) <= 7
+				PRINT 'database: ' + CHAR(39) + @databaseName + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', has been created recently on ' + CAST(@databaseCreateDate AS NVARCHAR) + '...';
+
+			IF (LEN(@databaseName) <> LEN(REPLACE(@databaseName,' ',''))) OR LEN(@databaseName) = 0
+				PRINT 'database: ' + CHAR(39) + CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', contains whitespace in the database name...';
+
+			/* Version specific*/
+			IF @databaseCompatibilityLevel < 130
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', compatibility mode is less than 100...';
+
+			IF @databaseCollationName <> CAST(SERVERPROPERTY('Collation') AS sysname)
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', database collation ' + @databaseCollationName + ' does not match server collation ' + CAST(SERVERPROPERTY('Collation') AS sysname) + '...';
+
+			IF @databaseUserAccessDesc <> 'MULTI_USER'
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', is set to ' + @databaseUserAccessDesc + '...';
+
+			IF @databaseIsAutoShrinkOn = 1
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', is_auto_shrink_on is set to ' + CAST(@databaseIsAutoShrinkOn AS NVARCHAR) + '...';
+
+			IF @databaseStateDesc <> 'ONLINE'
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', database state set is ' + @databaseStateDesc + '...';
+
+			IF @databaseIsCleanlyShutdown = 1
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', @databaseIsCleanlyShutdown is set to ' + CAST(@databaseIsCleanlyShutdown AS NVARCHAR) + '...';
+					
+			IF @databaseRecoveryModelDesc <> 'FULL' AND @databaseName NOT IN('Distribution','master','model','msdb')
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', recovery_model_desc is set to ' + @databaseRecoveryModelDesc + '...';			
+
+			IF @databasePageVerifyOptionDesc <> 'CHECKSUM'
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', page_verify_option_desc is set to ' + @databasePageVerifyOptionDesc + '...';			
+			
+			IF @databaseIsAutoCreateStatsOn = 0
+				PRINT 'database: ' + CHAR(39)+ CAST(@databaseName AS NVARCHAR) + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', is_auto_create_stats_on is set to ' + CAST(@databaseIsCleanlyShutdown AS NVARCHAR) + '...';
+
+			FETCH NEXT
+			FROM @databaseReviewCursor INTO @databaseID, @databaseName, @databaseCreateDate, @databaseCompatibilityLevel, @databaseCollationName,
+			@databaseUserAccessDesc, @databaseIsAutoShrinkOn, @databaseStateDesc, @databaseIsCleanlyShutdown, @databaseRecoveryModelDesc,
+			@databasePageVerifyOptionDesc, @databaseIsAutoCreateStatsOn
+		END
+	CLOSE @databaseReviewCursor
+	DEALLOCATE @databaseReviewCursor
+
+	----------------------------------------------------------------------------------------------------
+	--// Database backup information																//--
+	----------------------------------------------------------------------------------------------------
+	PRINT '';
+	PRINT 'Database backup review. Missing or OLD database backups...';
+	DECLARE @recommendationBackup [nvarchar](60);
+
+	DECLARE @actionCursor CURSOR
+	SET @actionCursor = CURSOR FOR
+	WITH CTE_LATEST_BACKUP AS (
+	SELECT
+		A.[database_name]
+		,MAX(A.[backup_start_date]) as last_backup_start_date
+		,MAX(A.[backup_finish_date]) as last_backup_finish_date
+	FROM 
+		msdb.dbo.backupset A
+	WHERE 
+		A.[type] = 'D' -- full Database backup
+	GROUP BY 
+		A.[database_name]
+		)
+	SELECT
+		A.[name]
+		,CASE WHEN (B.[last_backup_start_date] IS NULL OR B.[last_backup_finish_date] IS NULL) THEN 'The full database backup missing. Run backup immediately...'
+			WHEN DATEDIFF(day,B.[last_backup_finish_date],GETDATE()) >= 2 THEN 'The last full database backup date was on ' + CAST(B.[last_backup_finish_date] AS NVARCHAR) + '. Run backup immediately...'
+			END 
+	FROM sys.databases A
+		LEFT JOIN CTE_LATEST_BACKUP B ON A.[name] = B.[database_name]
+	WHERE
+		A.database_id <> 2 -- not tempdb
+		AND A.state_desc = 'ONLINE'
+		AND ((B.[last_backup_start_date] IS NULL OR B.[last_backup_finish_date] IS NULL) 
+			OR DATEDIFF(day,B.[last_backup_finish_date],GETDATE()) >= 2)
+	OPEN @actionCursor
+		FETCH NEXT
+		FROM @actionCursor INTO @databaseName, @recommendationBackup
+		WHILE  0 = @@FETCH_STATUS
+		BEGIN
+			PRINT 'database: ' + CHAR(39) + @databaseName + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', ' + @recommendationBackup;
+			FETCH NEXT
+			FROM @actionCursor INTO @databaseName, @recommendationBackup
+		END
+	CLOSE @actionCursor
+	DEALLOCATE @actionCursor
+
+	----------------------------------------------------------------------------------------------------
+	--// Print instance information																	//--
+	----------------------------------------------------------------------------------------------------
+	IF @detailed_instance_information = 1
+	BEGIN
+		PRINT '';
+		PRINT '';
+		PRINT 'Detailed instance information...'
+		PRINT 'cpu_count: ' + CAST(@cpu_count AS NVARCHAR);
+		PRINT 'physical_memory_kb: ' + CAST(@physical_memory_kb AS NVARCHAR);
+		PRINT 'BuildClrVersion: ' + CAST(@BuildClrVersion AS NVARCHAR);
+		PRINT 'Collation: ' + CAST(@Collation AS NVARCHAR);
+		PRINT 'CollationID: ' + CAST(@CollationID AS NVARCHAR);
+		PRINT 'ComparisonStyle: ' + CAST(@ComparisonStyle AS NVARCHAR);
+		PRINT 'ComputerNamePhysicalNetBIOS: ' + CAST(@ComputerNamePhysicalNetBIOS AS NVARCHAR);
+		PRINT 'Edition: ' + CAST(@Edition AS NVARCHAR);
+		PRINT 'EditionID: ' + CAST(@EditionID AS NVARCHAR);
+		PRINT 'EngineEdition: ' + CAST(@EngineEdition AS NVARCHAR);
+		PRINT 'HadrManagerStatus: ' + CAST(@HadrManagerStatus AS NVARCHAR);
+		PRINT 'InstanceDefaultDataPath: ' + CAST(@InstanceDefaultDataPath AS NVARCHAR);
+		PRINT 'InstanceDefaultLogPath: ' + CAST(@InstanceDefaultLogPath AS NVARCHAR);
+		PRINT 'InstanceName: ' + CAST(@InstanceName AS NVARCHAR);
+		PRINT 'IsAdvancedAnalyticsInstalled: ' + CAST(@IsAdvancedAnalyticsInstalled AS NVARCHAR);
+		PRINT 'IsFullTextInstalled: ' + CAST(@IsFullTextInstalled AS NVARCHAR);
+		PRINT 'IsHadrEnabled: ' + CAST(@IsHadrEnabled AS NVARCHAR);
+		PRINT 'IsIntegratedSecurityOnly: ' + CAST(@IsIntegratedSecurityOnly AS NVARCHAR);
+		PRINT 'IsLocalDB: ' + CAST(@IsLocalDB AS NVARCHAR);
+		PRINT 'IsPolybaseInstalled: ' + CAST(@IsPolybaseInstalled AS NVARCHAR);
+		PRINT 'IsSingleUser: ' + CAST(@IsSingleUser AS NVARCHAR);
+		PRINT 'IsXTPSupported: ' + CAST(@IsXTPSupported AS NVARCHAR);
+		PRINT 'LCID: ' + CAST(@LCID AS NVARCHAR);
+		PRINT 'MachineName: ' + CAST(@MachineName AS NVARCHAR);
+		PRINT 'ProcessID: ' + CAST(@ProcessID AS NVARCHAR);
+		PRINT 'ProductBuild: ' + CAST(@ProductBuild AS NVARCHAR);
+		PRINT 'ProductBuildType: ' + CAST(@ProductBuildType AS NVARCHAR);
+		PRINT 'ProductLevel: ' + CAST(@ProductLevel AS NVARCHAR);
+		PRINT 'ProductMajorVersion: ' + CAST(@ProductMajorVersion AS NVARCHAR);
+		PRINT 'ProductMinorVersion: ' + CAST(@ProductMinorVersion AS NVARCHAR);
+		PRINT 'ProductUpdateReference: ' + CAST(@ProductUpdateReference AS NVARCHAR);
+		PRINT 'ProductVersion: ' + CAST(@ProductVersion AS NVARCHAR);
+		PRINT 'ResourceLastUpdateDateTime: ' + CAST(@ResourceLastUpdateDateTime AS NVARCHAR);
+		PRINT 'ResourceVersion: ' + CAST(@ResourceVersion AS NVARCHAR);
+		PRINT 'ServerName: ' + CAST(@ServerName AS NVARCHAR);
+		PRINT 'SqlCharSet: ' + CAST(@SqlCharSet AS NVARCHAR);
+		PRINT 'SqlCharSetName: ' + CAST(@SqlCharSetName AS NVARCHAR);
+		PRINT 'SqlSortOrder: ' + CAST(@SqlSortOrder AS NVARCHAR);
+		PRINT 'SqlSortOrderName: ' + CAST(@SqlSortOrderName AS NVARCHAR);
+		PRINT 'FilestreamShareName: ' + CAST(@FilestreamShareName AS NVARCHAR);
+		PRINT 'FilestreamConfiguredLevel: ' + CAST(@FilestreamConfiguredLevel AS NVARCHAR);
+		PRINT 'FilestreamEffectiveLevel: ' + CAST(@FilestreamEffectiveLevel AS NVARCHAR);
+	END
+
+END
+GO
