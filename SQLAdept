@@ -19,8 +19,7 @@ Description.......... Provides BASIC recommendations on SQL Server misconfigurat
 License.............. The MIT License (Free software)
 Version.............. v1.1
 Supported............ SQL Server 2016+
-Site................. https://wiredconsultant.com
-Source............... https://github.com/JasonMcGinty/
+Source............... https://github.com/JasonMcGinty/Featured
 */
 
 ALTER PROCEDURE [dbo].[SQLAdept]
