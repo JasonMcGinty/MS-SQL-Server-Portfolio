@@ -6,23 +6,23 @@ SET NUMERIC_ROUNDABORT OFF;
 SET ARITHABORT ON;
 GO
 
-IF NOT EXISTS (SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE SPECIFIC_SCHEMA = 'dbo' AND ROUTINE_NAME = 'SQLAdept')
-	EXEC ('CREATE PROC [dbo].[SQLAdept] AS BEGIN SELECT 0 END;') -- Temporary Dummy Proc
+IF NOT EXISTS (SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES WHERE SPECIFIC_SCHEMA = 'dbo' AND ROUTINE_NAME = 'SqlConfig')
+	EXEC ('CREATE PROC [dbo].[SqlConfig] AS BEGIN SELECT 0 END;') -- Temporary Dummy Proc
 GO
 
 /*
 Author............... Jason McGinty
 Create date.......... 2018-06-01
 Modify Date.......... 2019-07-14
-Title................ sp_sqlAdept
+Title................ SqlConfig
 Description.......... Provides BASIC recommendations on SQL Server misconfigurations and backups
-License.............. The MIT License (Free software)
+License.............. The MIT License
 Version.............. v1.1
 Supported............ SQL Server 2016+
-Source............... https://github.com/JasonMcGinty/Featured
+Source............... https://github.com/JasonMcGinty/
 */
 
-ALTER PROCEDURE [dbo].[SQLAdept]
+ALTER PROCEDURE [dbo].[SqlConfig]
 	@detailed_instance_information BIT = 1
 	,@help BIT = 0
 AS
@@ -37,15 +37,17 @@ BEGIN
 	SET ARITHABORT ON;
 	SET NOCOUNT ON;
 
+	SELECT 'Check the Messages tab for the results.';
+
 	----------------------------------------------------------------------------------------------------
 	--// Help							                                                            //--
 	----------------------------------------------------------------------------------------------------
 	IF @help = 1
 	BEGIN
 		PRINT '';
-		PRINT 'HELP...';
-		PRINT 'SQLAdept by Jason McGinty';
-		PRINT 'EXEC [dbo].[sp_sqlAdept] 
+		PRINT 'HELP.';
+		PRINT 'SqlConfig by Jason McGinty';
+		PRINT 'EXEC [dbo].[sp_SqlConfig] 
 			@detailed_instance_information = 1, -- Default. Returns additional instance information.
 			@help BIT = 0 -- Help.';
 		PRINT '';
@@ -112,7 +114,7 @@ BEGIN
 		,@HadrManagerStatus = SERVERPROPERTY('HadrManagerStatus') --AS [HadrManagerStatus]
 		,@InstanceDefaultDataPath = SERVERPROPERTY('InstanceDefaultDataPath') --AS [InstanceDefaultDataPath]
 		,@InstanceDefaultLogPath = SERVERPROPERTY('InstanceDefaultLogPath') --AS [InstanceDefaultLogPath]
-		,@InstanceName = SERVERPROPERTY('InstanceName') --AS [InstanceName]
+		,@InstanceName = ISNULL(SERVERPROPERTY('InstanceName'),'DEFAULT') --AS [InstanceName]
 		,@IsAdvancedAnalyticsInstalled = SERVERPROPERTY('IsAdvancedAnalyticsInstalled') --AS [IsAdvancedAnalyticsInstalled]
 		,@IsClustered = SERVERPROPERTY('IsClustered') --AS [IsClustered]
 		,@IsFullTextInstalled = SERVERPROPERTY('IsFullTextInstalled') --AS [IsFullTextInstalled]
@@ -150,20 +152,21 @@ BEGIN
 	----------------------------------------------------------------------------------------------------
 	--// Start report					                                                            //--
 	----------------------------------------------------------------------------------------------------
+	PRINT 'Start time: ' + CAST(GETDATE() AS NVARCHAR) + '.';
 	PRINT '----------------------------------------------------------------------------------------------------';
 	PRINT 'SQL Adept report for SQL Server instance ' + CAST(@InstanceName AS NVARCHAR) + '.';
-	PRINT 'Start time: ' + CAST(GETDATE() AS NVARCHAR) + '.';
 	PRINT '(1) Always follow compliance protocol for your organization before making changes to PRODUCTION.';
 	PRINT '(2) This tool does NOT report ALL possible misconfigurations or issues.';
-	PRINT '(3) Related to (1) and (2). Fully test any changes before making changes to PRODUCTION.'
-	PRINT '(4) Always check with a QUALIFIED SQL Server DBA before making changes to any environment.'
+	PRINT '(3) Related to (1) and (2). Fully test any changes before making changes to PRODUCTION.';
+	PRINT '(4) Always check with a QUALIFIED SQL Server DBA before making changes to any environment.';
+	PRINT '(5) OLAP Fill Factor should be 0/100. OLTP Fill Factor should not be 0/100.';
 	PRINT '----------------------------------------------------------------------------------------------------';
 
 	----------------------------------------------------------------------------------------------------
 	--// Recommendations for the instance															//--
 	----------------------------------------------------------------------------------------------------
 	PRINT '';
-	PRINT 'Recommendations for the instance ' + CAST(@InstanceName AS NVARCHAR) + '...';
+	PRINT 'Recommendations for the instance ' + CAST(@InstanceName AS sysname) + '...';
 	DECLARE @nText VARCHAR(MAX);
 	IF @Edition = 'Developer Edition (64-bit)'
 	BEGIN
@@ -196,9 +199,15 @@ BEGIN
 	END
 
 	/* Version specifc */
-	IF CAST(@ProductMajorVersion AS INT) < 13
+	IF CAST(@ProductMajorVersion AS INT) < 11 -- SQL 2012
 	BEGIN
 		SET @nText = 'Plan to upgrade or migrate to SQL Server 2016 or higher...';
+		PRINT @nText;
+	END
+
+	IF (SELECT value_data FROM sys.dm_server_registry WHERE registry_key LIKE '%IPALL' AND value_name in ('TcpPort')) = '1433'
+	BEGIN
+		SET @nText = 'TcpPort is set to 1433! This is a dangerous setting...';
 		PRINT @nText;
 	END
 
@@ -420,7 +429,8 @@ BEGIN
 		A.[database_name]
 		)
 	SELECT
-		A.[name]
+		A.[database_id]
+		,A.[name]
 		,CASE WHEN (B.[last_backup_start_date] IS NULL OR B.[last_backup_finish_date] IS NULL) THEN 'The full database backup missing. Run backup immediately...'
 			WHEN DATEDIFF(day,B.[last_backup_finish_date],GETDATE()) >= 2 THEN 'The last full database backup date was on ' + CAST(B.[last_backup_finish_date] AS NVARCHAR) + '. Run backup immediately...'
 			END 
@@ -433,12 +443,12 @@ BEGIN
 			OR DATEDIFF(day,B.[last_backup_finish_date],GETDATE()) >= 2)
 	OPEN @actionCursor
 		FETCH NEXT
-		FROM @actionCursor INTO @databaseName, @recommendationBackup
+		FROM @actionCursor INTO @databaseID, @databaseName, @recommendationBackup
 		WHILE  0 = @@FETCH_STATUS
 		BEGIN
 			PRINT 'database: ' + CHAR(39) + @databaseName + CHAR(39) + ', @databaseID: ' + CAST(@databaseID AS NVARCHAR) + ', ' + @recommendationBackup;
 			FETCH NEXT
-			FROM @actionCursor INTO @databaseName, @recommendationBackup
+			FROM @actionCursor INTO @databaseID, @databaseName, @recommendationBackup
 		END
 	CLOSE @actionCursor
 	DEALLOCATE @actionCursor
@@ -464,7 +474,7 @@ BEGIN
 		PRINT 'HadrManagerStatus: ' + CAST(@HadrManagerStatus AS NVARCHAR);
 		PRINT 'InstanceDefaultDataPath: ' + CAST(@InstanceDefaultDataPath AS NVARCHAR);
 		PRINT 'InstanceDefaultLogPath: ' + CAST(@InstanceDefaultLogPath AS NVARCHAR);
-		PRINT 'InstanceName: ' + CAST(@InstanceName AS NVARCHAR);
+		PRINT 'InstanceName: ' + ISNULL(CAST(@InstanceName AS NVARCHAR),'DEFAULT');
 		PRINT 'IsAdvancedAnalyticsInstalled: ' + CAST(@IsAdvancedAnalyticsInstalled AS NVARCHAR);
 		PRINT 'IsFullTextInstalled: ' + CAST(@IsFullTextInstalled AS NVARCHAR);
 		PRINT 'IsHadrEnabled: ' + CAST(@IsHadrEnabled AS NVARCHAR);
